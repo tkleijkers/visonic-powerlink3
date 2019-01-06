@@ -1,0 +1,25 @@
+{
+  "name": "visonic-powerlink3",
+  "version": "1.0.0",
+  "description": "Allows you to get and set the status of a Visonic security system (i.e. arm or disarm it) via its PowerLink3 communication module",
+  "keywords": [
+    "visonic",
+    "powerlink3",
+    "powermax"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tom Kleijkers",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tkleijkers/visonic-powerlink3"
+  },
+  "bugs": "https://github.com/tkleijkers/visonic-powerlink3/issues",
+  "license": "MIT",
+  "dependencies": {
+    "one-concurrent": "^1.0.0",
+    "request": "^2.85.0"
+  }
+}
