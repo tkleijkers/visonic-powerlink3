@@ -61,7 +61,7 @@ Map of possible statuses
 
 * `config` **Object**
 
-	- `host` **string** – The IP address, or hostname, of the PowerLink3. (The IP address will match your router's, but with the last block being `.200`, if DHCP is used)
+	- `host` **string** – The IP address, or hostname, of the PowerLink3 server
 
 	- `userCode` **string** – The pin code you use to disarm or arm the system
 

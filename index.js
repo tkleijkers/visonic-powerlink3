@@ -67,9 +67,9 @@ PowerLink3.prototype.getStatus = function (callback) {
 			self.log(`Response from getRawState HTTP call:`)
 			self.log(`response: %j`, response)
 			self.log(`body: %j`, JSON.parse(body))
-			var json = JSON.parse(body);
 		}
 
+		var json = JSON.parse(body);
 		if (json.is_connected != true && self.retry < 5) {
 			// Not yet connected to panel
 			self.retry += 1;
@@ -110,23 +110,26 @@ PowerLink3.prototype.getStatus = function (callback) {
 PowerLink3.prototype.setStatus = function (status, callback) {
 	var self = this;
 
-	let stringMap = {};
-	stringMap[PowerLink3.STATUSES.DISARMED] = 'Disarm';
-	stringMap[PowerLink3.STATUSES.ARMED_HOME] = 'ArmHome';
-	stringMap[PowerLink3.STATUSES.ARMED_AWAY] = 'ArmAway';
+	let urlMap = {};
+	urlMap[PowerLink3.STATUSES.DISARMED] = '/rest_api/3.0/disarm';
+	urlMap[PowerLink3.STATUSES.ARMED_HOME] = '/rest_api/3.0/arm_home';
+	urlMap[PowerLink3.STATUSES.ARMED_AWAY] = '/rest_api/3.0/arm_away';
 
-	let statusString = stringMap[status]; // Get the right string for use in the API call
+	let url = urlMap[status]; // Get the right string for use in the API call
 
-	if (statusString == undefined) {
+	if (url == undefined) {
 		callback(new Error(`Cannot set status to: ${status}`)); // For example: PowerLink3.STATUSES.EXIT_DELAY
 		return;
 	}
 
 	self.authenticatedRequest({
-		url: self.baseURL + '/web/ajax/security.main.status.ajax.php',
+		url: self.baseURL + url,
 		method: 'POST',
-		form: {
-			'set': statusString
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		json: {
+			'partition': 'P1'
 		}
 	}, 
 	function (error, response, body) {
