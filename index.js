@@ -93,8 +93,8 @@ PowerLink3.prototype.getStatus = function (callback) {
 				'Disarm': PowerLink3.STATUSES.DISARMED,
 				'NotReady': PowerLink3.STATUSES.DISARMED,
 				'Exit Delay': PowerLink3.STATUSES.EXIT_DELAY,
-				'HOME': PowerLink3.STATUSES.ARMED_HOME,
-				'AWAY': PowerLink3.STATUSES.ARMED_AWAY,
+				'Home': PowerLink3.STATUSES.ARMED_HOME,
+				'Away': PowerLink3.STATUSES.ARMED_AWAY,
 			}
 	
 			let status = statusStringToStatus[statusString] || PowerLink3.STATUSES.UNKNOWN;
