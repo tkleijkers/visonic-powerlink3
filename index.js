@@ -1,5 +1,6 @@
 var request = require("request");
 var oneConcurrent = require("one-concurrent");
+var retry = require("retry");
 
 /**
  * Allows you to get and set the status of a Visonic security system (i.e. arm or disarm it) via its PowerLink3 communication module
@@ -35,6 +36,7 @@ PowerLink3.STATUSES = {
 	UNKNOWN: 'unknown' // Can only get, not set, this status.
 }
 
+
 /**
  * Get the current system status
  * 
@@ -56,48 +58,50 @@ PowerLink3.prototype.getStatus = function (callback) {
 		}
 	}
 
-	self.authenticatedRequest(request, function(error, response, body) {
+	var operation = retry.operation({
+		retries: 3,            // try 1 time and retry 2 times if needed, total = 3
+		minTimeout: 2 * 1000, // the number of milliseconds before starting the first retry
+		maxTimeout: 10 * 1000  // the maximum number of milliseconds between two retries
+	  });
+ 
+	operation.attempt(function(currentAttempt) {
+		self.authenticatedRequest(request, function(error, response, body) {
 
-		if (error) {
-			callback(new Error(`Error getting raw status: ${error}`));
-			return;
-		}
-
-		if (self.debug) {
-			self.log(`Response from getRawState HTTP call:`)
-			self.log(`response: %j`, response)
-			self.log(`body: %j`, JSON.parse(body))
-		}
-
-		var json = JSON.parse(body);
-		if (json.is_connected != true && self.retry < 5) {
-			// Not yet connected to panel
-			self.retry += 1;
-			self.log(`Panel not yet connected, retry in 3 seconds`);
-			setTimeout(function () {
-				self.authenticatedRequest(request, callback); // Re-run this request
-			}, 3*1000); // Sane retry delay
-			return;
-		}
-
-		self.retry = 0;
-
-		var statusString = json.partitions[0].state;
-		// statusString = "Disarm" / "HOME" / "AWAY" / unexpected
-
-		let statusStringToStatus = {
-			'Disarm': PowerLink3.STATUSES.DISARMED,
-			'NotReady': PowerLink3.STATUSES.DISARMED,
-			'Exit Delay': PowerLink3.STATUSES.EXIT_DELAY,
-			'HOME': PowerLink3.STATUSES.ARMED_HOME,
-			'AWAY': PowerLink3.STATUSES.ARMED_AWAY,
-		}
-
-		let status = statusStringToStatus[statusString] || PowerLink3.STATUSES.UNKNOWN;
-		self.lastStatus = status;
-
-		callback(error, status);
-		
+			console.log('Current attempt: ' + currentAttempt);
+			if (error) {
+				callback(new Error(`Error getting raw status: ${error}`));
+				return;
+			}
+	
+			if (self.debug) {
+				self.log(`Response from getRawState HTTP call:`)
+				self.log(`response: %j`, response)
+				self.log(`body: %j`, JSON.parse(body))
+			}
+	
+			var json = JSON.parse(body);
+			if (json.is_connected != true && operation.retry(new Error('Not connected'))) {
+				// Not yet connected to panel
+				self.log('Panel not yet connected');
+				return;
+			}
+	
+			var statusString = json.partitions[0].state;
+			// statusString = "Disarm" / "HOME" / "AWAY" / unexpected
+	
+			let statusStringToStatus = {
+				'Disarm': PowerLink3.STATUSES.DISARMED,
+				'NotReady': PowerLink3.STATUSES.DISARMED,
+				'Exit Delay': PowerLink3.STATUSES.EXIT_DELAY,
+				'HOME': PowerLink3.STATUSES.ARMED_HOME,
+				'AWAY': PowerLink3.STATUSES.ARMED_AWAY,
+			}
+	
+			let status = statusStringToStatus[statusString] || PowerLink3.STATUSES.UNKNOWN;
+			self.lastStatus = status;
+	
+			callback(error, status);
+		});
 	});
 }
 
@@ -134,7 +138,9 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 	}, 
 	function (error, response, body) {
 
-		self.debugLog(`Got setStatus HTTP response body: ${body}`)
+		self.log(`Response from setStatus HTTP call:`)
+		self.log(`response: %j`, response)
+		self.log(`body: %j`, body)
 
 		callback(error);
 	});
