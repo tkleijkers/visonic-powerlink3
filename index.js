@@ -67,7 +67,7 @@ PowerLink3.prototype.getStatus = function (callback) {
 	operation.attempt(function(currentAttempt) {
 		self.authenticatedRequest(request, function(error, response, body) {
 
-			console.log('Current attempt: ' + currentAttempt);
+			self.log('Updating status (' + currentAttempt + ')');
 			if (error) {
 				callback(new Error(`Error getting raw status: ${error}`));
 				return;
