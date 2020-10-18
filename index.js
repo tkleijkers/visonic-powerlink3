@@ -1,6 +1,7 @@
 var request = require("request");
 var oneConcurrent = require("one-concurrent");
 var retry = require("retry");
+var async = require('async'); 
 
 /**
  * Allows you to get and set the status of a Visonic security system (i.e. arm or disarm it) via its PowerLink3 communication module
@@ -24,8 +25,11 @@ function PowerLink3(config, log) {
 	self.userId = config.userId;
 	self.panelWebName = config.panelWebName;
 	self.retry = 0;
+	self.userEmail = config.userEmail;
+	self.userPassword = config.userPassword;
 
 	self.timeout = config.timeout || 2500;
+	self.restVersion = '8.0';
 }
 
 PowerLink3.STATUSES = {
@@ -45,7 +49,7 @@ PowerLink3.STATUSES = {
 PowerLink3.prototype.getStatus = function (callback) {
 	var self = this;
 	var request = {
-		url: self.baseURL + '/rest_api/3.0/status',
+		url: self.baseURL + '/rest_api/' + self.restVersion + '/status',
 		method: 'GET',
 		headers: {
 			'Content-Type': 'application/json'
@@ -67,7 +71,7 @@ PowerLink3.prototype.getStatus = function (callback) {
 	operation.attempt(function(currentAttempt) {
 		self.authenticatedRequest(request, function(error, response, body) {
 
-			console.log('Current attempt: ' + currentAttempt);
+			self.log('Current attempt: ' + currentAttempt);
 			if (error) {
 				callback(new Error(`Error getting raw status: ${error}`));
 				return;
@@ -76,11 +80,13 @@ PowerLink3.prototype.getStatus = function (callback) {
 			if (self.debug) {
 				self.log(`Response from getRawState HTTP call:`)
 				self.log(`response: %j`, response)
-				self.log(`body: %j`, JSON.parse(body))
+				if (body != undefined) {
+					self.log(`body: %j`, JSON.parse(body))
+				}
 			}
 	
 			var json = JSON.parse(body);
-			if (json.is_connected != true && operation.retry(new Error('Not connected'))) {
+			if (json.connected != true && operation.retry(new Error('Not connected'))) {
 				// Not yet connected to panel
 				self.log('Panel not yet connected');
 				return;
@@ -90,11 +96,11 @@ PowerLink3.prototype.getStatus = function (callback) {
 			// statusString = "Disarm" / "HOME" / "AWAY" / unexpected
 	
 			let statusStringToStatus = {
-				'Disarm': PowerLink3.STATUSES.DISARMED,
-				'NotReady': PowerLink3.STATUSES.DISARMED,
-				'Exit Delay': PowerLink3.STATUSES.EXIT_DELAY,
-				'Home': PowerLink3.STATUSES.ARMED_HOME,
-				'Away': PowerLink3.STATUSES.ARMED_AWAY,
+				'DISARM': PowerLink3.STATUSES.DISARMED,
+				'NOTREADY': PowerLink3.STATUSES.DISARMED,
+				'EXIT': PowerLink3.STATUSES.EXIT_DELAY,
+				'HOME': PowerLink3.STATUSES.ARMED_HOME,
+				'AWAY': PowerLink3.STATUSES.ARMED_AWAY,
 			}
 	
 			let status = statusStringToStatus[statusString] || PowerLink3.STATUSES.UNKNOWN;
@@ -114,14 +120,16 @@ PowerLink3.prototype.getStatus = function (callback) {
 PowerLink3.prototype.setStatus = function (status, callback) {
 	var self = this;
 
-	let urlMap = {};
-	urlMap[PowerLink3.STATUSES.DISARMED] = '/rest_api/3.0/disarm';
-	urlMap[PowerLink3.STATUSES.ARMED_HOME] = '/rest_api/3.0/arm_home';
-	urlMap[PowerLink3.STATUSES.ARMED_AWAY] = '/rest_api/3.0/arm_away';
+	let url = '/rest_api/' + self.restVersion + '/set_state';
 
-	let url = urlMap[status]; // Get the right string for use in the API call
+	let stateMap = {};
+	stateMap[PowerLink3.STATUSES.DISARMED] = 'DISARM';
+	stateMap[PowerLink3.STATUSES.ARMED_HOME] = 'HOME';
+	stateMap[PowerLink3.STATUSES.ARMED_AWAY] = 'AWAY';
 
-	if (url == undefined) {
+	let state = stateMap[status]; // Get the right string for use in the API call
+
+	if (state == undefined) {
 		callback(new Error(`Cannot set status to: ${status}`)); // For example: PowerLink3.STATUSES.EXIT_DELAY
 		return;
 	}
@@ -133,7 +141,8 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 			'Content-Type': 'application/json'
 		},
 		json: {
-			'partition': 'P1'
+			'partition': -1,
+			'state': state
 		}
 	}, 
 	function (error, response, body) {
@@ -147,7 +156,53 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 }
 
 /**
- * Logs in, and gets the session-token
+ * Logs in, and gets the user-token
+ * 
+ * @private
+ * @param  {Function} callback - Callback to call with the user-token string (error, user-token)
+ */
+PowerLink3.prototype.getUserToken = function (callback) {
+	var self = this;
+
+	if (self.failSafe) {
+		callback(new Error("A previous authentication attempt failed; not continuing."));
+		return;
+	}
+
+	request({
+		url: self.baseURL + '/rest_api/' + self.restVersion + '/auth',
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		json: {
+			email: self.userEmail,
+			password: self.userPassword,
+			app_id: self.userId
+		},
+		timeout: self.timeout
+	}, 
+	function(error, response, body) {
+
+		if (self.debug) {
+			self.log(`Response from getUserToken HTTP call:`)
+			self.log(`error: ${error}`)
+			self.log('response:  %j', response)
+			self.log(`body: %j`, body)
+		}
+
+		if (error) { callback(error); return; }
+		if (body.error != null) { callback(body.error_message); return; }
+		
+		self.userToken = body.user_token;
+		self.debugLog(`Got user-token: ${self.userToken}`);
+
+		callback(null);
+	});
+}
+
+/**
+ * Logs in, connect to panel and gets the session-token
  * 
  * @private
  * @param  {Function} callback - Callback to call with the session-token string (error, session-token)
@@ -155,29 +210,29 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 PowerLink3.prototype.getSessionToken = function (callback) {
 	var self = this;
 
-	// "Mmmm, yummy!" – Manila Luzon
-
 	if (self.failSafe) {
 		callback(new Error("A previous authentication attempt failed; not continuing."));
 		return;
 	}
 
-	if (self.sessionToken != null) { // Do we already have an session token from before?
-		callback(null, self.sessionToken);
+	if (self.sessionToken != null) { 
+		// Do we already have an session token from before?
+		callback(null);
 		return;
 	}
 
 	request({
-		url: self.baseURL + '/rest_api/3.0/login',
+		url: self.baseURL + '/rest_api/' + self.restVersion + '/panel/login',
 		method: 'POST',
 		headers: {
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			'User-Token': self.userToken
 		},
 		json: {
 			user_code: self.userCode,
 			app_type: self.appType,
-			user_id: self.userId,
-			panel_web_name: self.panelWebName
+			app_id: self.userId,
+			panel_serial: self.panelWebName
 		},
 		timeout: self.timeout
 	}, 
@@ -196,7 +251,7 @@ PowerLink3.prototype.getSessionToken = function (callback) {
 		self.sessionToken = body.session_token;
 		self.debugLog(`Got session-token: ${self.sessionToken}`);
 
-		callback(null, self.sessionToken);
+		callback(null);
 	});
 }
 
@@ -207,44 +262,52 @@ PowerLink3.prototype.getSessionToken = function (callback) {
  * @param {Object} config - Configuration object, in the format that the 'request' module expects
  * @param {Function} callback - Callback to call (error, response, body)
  */
-PowerLink3.prototype.authenticatedRequest = function (config, callback) {
+PowerLink3.prototype.authenticatedRequest = function (config, responseCallback) {
 	let self = this;
 
-	oneConcurrent(function (callback) {
-		self.getSessionToken(callback);
+	oneConcurrent(function () {
+		async.series([
+			(f) => {
+				self.getUserToken(f);
+			},
+			(f) => {
+				self.getSessionToken(f);
+			}
+		], function (error) {
 
-	}, function (error, sessionToken) {
+			self.log('Executing request ' + config.url);
 
-		if (error) { 
-			callback(new Error(`Failed to get authentication session-token: ${error}`)); 
-			return; 
-		}
-
-		config.headers = config.headers || {};
-		config.headers['Session-Token'] = sessionToken
-
-		config.timeout = config.timeout || self.timeout;
-
-		request(config, function (error, response, body) {
-
-			if (!error) {
-
-				// Check whether we're not logged in anymore
-				if (response.statusCode == 440) {
-
-					self.debugLog(`Our session-token probably isn't valid anymore - let's get another one`);
-
-					self.sessionToken = null; // Invalidate the cookie we have
-
-					setTimeout(function () {
-						self.authenticatedRequest(config, callback); // Re-run this request, fetching a new cookie in the meantime
-					}, 3*1000); // Sane retry delay
-					
-					return;
-				}
+			if (error) { 
+				responseCallback(new Error(`Failed to get authentication session-token: ${error}`)); 
+				return; 
 			}
 
-			callback(error, response, body); // Continue as normal
+			config.headers = config.headers || {};
+			config.headers['Session-Token'] = self.sessionToken;
+			config.headers['User-Token'] = self.userToken;
+
+			config.timeout = config.timeout || self.timeout;
+
+			request(config, function (error, response, body) {
+
+				if (!error) {
+					// Check whether we're not logged in anymore
+					if (response.statusCode == 440) {
+
+						self.debugLog(`Our session-token probably isn't valid anymore - let's get another one`);
+
+						self.sessionToken = null; // Invalidate the cookie we have
+
+						setTimeout(function () {
+							self.authenticatedRequest(config, responseCallback); // Re-run this request, fetching a new cookie in the meantime
+						}, 3*1000); // Sane retry delay
+						
+						return;
+					}
+				}
+
+				responseCallback(error, response, body); // Continue as normal
+			});
 		});
 	});
 }

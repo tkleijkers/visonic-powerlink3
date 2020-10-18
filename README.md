@@ -2,6 +2,8 @@
 
 Allows you to get and set the status of a Visonic security system (i.e. arm or disarm it) via its PowerLink3 communication module and server
 
+<script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="tkleijkers" data-color="#FFDD00" data-emoji="🍺"  data-font="Cookie" data-text="Buy me a Beer" data-outline-color="#000" data-font-color="#000" data-coffee-color="#fff" ></script>
+
 ## Install
 
 ```bash
@@ -18,7 +20,9 @@ var PowerLink3 = new PowerLink3({
 	userCode: "your-pin-code",
 	appType: "com.visonic.PowerMaxApp",
 	userId: "generated-guid",
-	panelWebName: "your-panel-web-name"
+	panelWebName: "your-panel-web-name",
+	userEmail = "your@email.com"
+	userPassword = "yourpassword"
 });
 
 PowerLink3.getStatus(function (error, status) {
@@ -72,6 +76,10 @@ Map of possible statuses
 	- `panelWebName` **string** – The panel web name as used in the Visonic GO app
 
 	- `debug` optional **boolean** – Turns on extensive logging, to help debug issues, when set to `true` (default: `false`)
+
+	- `userEmail` **string** - Your e-mail to login to Visonic
+
+	- `userPassword` **string** - Your password to login to Visonic
 
 * `log` optional **Function** - Logging function
 
