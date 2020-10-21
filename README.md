@@ -21,7 +21,7 @@ var PowerLink3 = new PowerLink3({
 	appType: "com.visonic.PowerMaxApp",
 	userId: "generated-guid",
 	panelWebName: "your-panel-web-name",
-	userEmail = "your@email.com"
+	userEmail = "your@email.com",
 	userPassword = "yourpassword"
 });
 
