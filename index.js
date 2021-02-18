@@ -265,7 +265,7 @@ PowerLink3.prototype.getSessionToken = function (callback) {
 PowerLink3.prototype.authenticatedRequest = function (config, responseCallback) {
 	let self = this;
 
-	oneConcurrent(function () {
+	oneConcurrent(function (callback) {
 		async.series([
 			(f) => {
 				self.getUserToken(f);
@@ -273,41 +273,40 @@ PowerLink3.prototype.authenticatedRequest = function (config, responseCallback) 
 			(f) => {
 				self.getSessionToken(f);
 			}
-		], function (error) {
+		], callback);
+	}, function (error) {
 
-			self.log('Executing request ' + config.url);
+		if (error) { 
+			responseCallback(new Error(`Failed to get authentication session-token: ${error}`)); 
+			return; 
+		}
+		self.log('Executing request ' + config.url);
 
-			if (error) { 
-				responseCallback(new Error(`Failed to get authentication session-token: ${error}`)); 
-				return; 
+		config.headers = config.headers || {};
+		config.headers['Session-Token'] = self.sessionToken;
+		config.headers['User-Token'] = self.userToken;
+
+		config.timeout = config.timeout || self.timeout;
+
+		request(config, function (error, response, body) {
+
+			if (!error) {
+				// Check whether we're not logged in anymore
+				if (response.statusCode == 440) {
+
+					self.debugLog(`Our session-token probably isn't valid anymore - let's get another one`);
+
+					self.sessionToken = null; // Invalidate the cookie we have
+
+					setTimeout(function () {
+						self.authenticatedRequest(config, responseCallback); // Re-run this request, fetching a new cookie in the meantime
+					}, 3*1000); // Sane retry delay
+					
+					return;
+				}
 			}
 
-			config.headers = config.headers || {};
-			config.headers['Session-Token'] = self.sessionToken;
-			config.headers['User-Token'] = self.userToken;
-
-			config.timeout = config.timeout || self.timeout;
-
-			request(config, function (error, response, body) {
-
-				if (!error) {
-					// Check whether we're not logged in anymore
-					if (response.statusCode == 440) {
-
-						self.debugLog(`Our session-token probably isn't valid anymore - let's get another one`);
-
-						self.sessionToken = null; // Invalidate the cookie we have
-
-						setTimeout(function () {
-							self.authenticatedRequest(config, responseCallback); // Re-run this request, fetching a new cookie in the meantime
-						}, 3*1000); // Sane retry delay
-						
-						return;
-					}
-				}
-
-				responseCallback(error, response, body); // Continue as normal
-			});
+			responseCallback(error, response, body); // Continue as normal
 		});
 	});
 }
