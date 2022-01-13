@@ -29,7 +29,7 @@ function PowerLink3(config, log) {
 	self.userPassword = config.userPassword;
 
 	self.timeout = config.timeout || 2500;
-	self.restVersion = '8.0';
+	self.restVersion = '9.0';
 }
 
 PowerLink3.STATUSES = {
