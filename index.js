@@ -117,7 +117,7 @@ PowerLink3.prototype.getStatus = function (callback) {
  * @param {string} status - The status to set. Use a value from PowerLink3.STATUSES
  * @param {Function} callback - Callback to call (error)
  */
-PowerLink3.prototype.setStatus = function (status, callback) {
+ PowerLink3.prototype.setStatus = function (status, callback) {
 	var self = this;
 
 	let url = '/rest_api/' + self.restVersion + '/set_state';
@@ -134,7 +134,7 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 		return;
 	}
 
-	self.authenticatedRequest({
+	var request = {
 		url: self.baseURL + url,
 		method: 'POST',
 		headers: {
@@ -144,14 +144,37 @@ PowerLink3.prototype.setStatus = function (status, callback) {
 			'partition': -1,
 			'state': state
 		}
-	}, 
-	function (error, response, body) {
+	}
 
-		self.log(`Response from setStatus HTTP call:`)
-		self.log(`response: %j`, response)
-		self.log(`body: %j`, body)
+	var operation = retry.operation({
+		retries: 3,            // try 1 time and retry 2 times if needed, total = 3
+		minTimeout: 5 * 1000, // the number of milliseconds before starting the first retry
+		maxTimeout: 20 * 1000  // the maximum number of milliseconds between two retries
+	  });
+ 
+	operation.attempt(function(currentAttempt) {
+		self.authenticatedRequest(request, function (error, response, body) {
 
-		callback(error);
+			self.log('Setting status (' + currentAttempt + ')');
+			if (error) {
+				callback(new Error(`Error setting status: ${error}`));
+				return;
+			}
+
+			if (self.debug) {
+				self.log(`Response from getRawState HTTP call:`)
+				self.log(`response: %j`, response)
+				self.log(`body: %j`, body)
+			}
+
+			var json = body;
+			if (json.connected != true && operation.retry(new Error('Not connected'))) {
+				// Not yet connected to panel
+				self.log('Panel not yet connected');
+				return;
+			}
+
+		});
 	});
 }
 
