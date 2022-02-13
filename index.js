@@ -156,23 +156,25 @@ PowerLink3.prototype.getStatus = function (callback) {
 		self.authenticatedRequest(request, function (error, response, body) {
 
 			self.log('Setting status (' + currentAttempt + ')');
-			if (error) {
-				callback(new Error(`Error setting status: ${error}`));
-				return;
-			}
-
+			
 			if (self.debug) {
 				self.log(`Response from getRawState HTTP call:`)
 				self.log(`response: %j`, response)
 				self.log(`body: %j`, body)
 			}
 
-			var json = body;
-			if (json.connected != true && operation.retry(new Error('Not connected'))) {
+			if (response.statusCode != 200 && operation.retry(new Error('Not connected'))) {
 				// Not yet connected to panel
 				self.log('Panel not yet connected');
 				return;
 			}
+
+			if (error) {
+				callback(new Error(`Error setting status: ${error}`));
+				return;
+			}
+
+			callback(null);
 
 		});
 	});
