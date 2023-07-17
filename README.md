@@ -22,7 +22,8 @@ var PowerLink3 = new PowerLink3({
 	userId: "generated-guid",
 	panelWebName: "your-panel-web-name",
 	userEmail = "your@email.com",
-	userPassword = "yourpassword"
+	userPassword = "yourpassword",
+	restVersion = "10.0"
 });
 
 PowerLink3.getStatus(function (error, status) {
@@ -80,6 +81,8 @@ Map of possible statuses
 	- `userEmail` **string** - Your e-mail to login to Visonic
 
 	- `userPassword` **string** - Your password to login to Visonic
+
+	- `restVersion` **string** - Version of the REST API of Visonic (default 10.0)
 
 * `log` optional **Function** - Logging function
 
